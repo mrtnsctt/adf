@@ -1,0 +1,18 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"value": "mart20210617training"
+		},
+		"mart20210617training-WorkspaceDefaultSqlServer_connectionString": {
+			"value": ""
+		},
+		"mart20210617training-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"value": "https://dlgen2mart20210617.dfs.core.windows.net"
+		},
+		"nyc_tlc_yellow_sasUri": {
+			"value": ""
+		}
+	}
+}

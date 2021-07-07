@@ -1,0 +1,300 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"type": "string",
+			"metadata": "Workspace name",
+			"defaultValue": "mart20210617training"
+		},
+		"mart20210617training-WorkspaceDefaultSqlServer_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'mart20210617training-WorkspaceDefaultSqlServer'"
+		},
+		"mart20210617training-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://dlgen2mart20210617.dfs.core.windows.net"
+		},
+		"nyc_tlc_yellow_sasUri": {
+			"type": "secureString",
+			"metadata": "Secure string for 'sasUri' of 'nyc_tlc_yellow'"
+		}
+	},
+	"variables": {
+		"workspaceId": "[concat('Microsoft.Synapse/workspaces/', parameters('workspaceName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('workspaceName'), '/PowerBIWorkspace1')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "PowerBIWorkspace",
+				"typeProperties": {
+					"workspaceID": "b6efa2f5-3223-4ab4-b4f9-b2645323f798",
+					"tenantID": "8e4b9cc7-3ac3-4833-b787-4c45ea80ca1c"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/mart20210617training-WorkspaceDefaultSqlServer')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"DBName": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"connectionString": "[parameters('mart20210617training-WorkspaceDefaultSqlServer_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/mart20210617training-WorkspaceDefaultStorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('mart20210617training-WorkspaceDefaultStorage_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/nyc_tlc_yellow')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobStorage",
+				"typeProperties": {
+					"sasUri": "[parameters('nyc_tlc_yellow_sasUri')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AutoResolveIntegrationRuntime')]",
+			"type": "Microsoft.Synapse/workspaces/integrationRuntimes",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "AutoResolve",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 0
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/WorkspaceSystemIdentity')]",
+			"type": "Microsoft.Synapse/workspaces/credentials",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "ManagedIdentity",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Create external table with SQL')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "/* Note: this script is filtered on a specific month. You can modify the location to read the entire dataset. */\nIF NOT EXISTS (SELECT * FROM sys.external_file_formats WHERE name = 'SynapseParquetFormat')\n\tCREATE EXTERNAL FILE FORMAT [SynapseParquetFormat]\n\tWITH ( FORMAT_TYPE = PARQUET)\nGO\n\nIF NOT EXISTS (SELECT * FROM sys.external_data_sources WHERE name = 'nyctlc_azureopendatastorage_blob_core_windows_net')\n\tCREATE EXTERNAL DATA SOURCE [nyctlc_azureopendatastorage_blob_core_windows_net]\n\tWITH (\n\t\tLOCATION = 'wasbs://nyctlc@azureopendatastorage.blob.core.windows.net',\n\t\tTYPE     = HADOOP\n\t)\nGO\n\nCREATE EXTERNAL TABLE nyc_tlc_yellow_trip_ext (\n\t[vendorID] varchar(8000),\n\t[tpepPickupDateTime] datetime2(7),\n\t[tpepDropoffDateTime] datetime2(7),\n\t[passengerCount] int,\n\t[tripDistance] float,\n\t[puLocationId] varchar(8000),\n\t[doLocationId] varchar(8000),\n\t[startLon] float,\n\t[startLat] float,\n\t[endLon] float,\n\t[endLat] float,\n\t[rateCodeId] int,\n\t[storeAndFwdFlag] varchar(8000),\n\t[paymentType] varchar(8000),\n\t[fareAmount] float,\n\t[extra] float,\n\t[mtaTax] float,\n\t[improvementSurcharge] varchar(8000),\n\t[tipAmount] float,\n\t[tollsAmount] float,\n\t[totalAmount] float\n\t)\n\tWITH (\n    LOCATION = 'yellow/puYear=2014/puMonth=3/',\n    -- LOCATION = 'yellow'\n\tDATA_SOURCE = [nyctlc_azureopendatastorage_blob_core_windows_net],\n\tFILE_FORMAT = [SynapseParquetFormat],\n\tREJECT_TYPE = VALUE,\n\tREJECT_VALUE = 0\n\t)\nGO\n\nSELECT TOP 100 * FROM nyc_tlc_yellow_trip_ext\nGO\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"poolName": "mysqlpool",
+						"databaseName": "mysqlpool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Dynamic Data Masking for dedicated SQL pools')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "CREATE TABLE Membership\n(MemberID int IDENTITY,\n FirstName varchar(100) MASKED WITH (FUNCTION = 'partial(1,\"XXXXXXX\",0)') NULL,\n LastName varchar(100) NOT NULL,\n Phone varchar(12) MASKED WITH (FUNCTION = 'default()') NULL,\n Email varchar(100) MASKED WITH (FUNCTION = 'email()') NULL);\n\n--Insert sample data in the table\nINSERT Membership VALUES ('Roberto', 'Tamburello', '555.123.4567', 'RTamburello@contoso.com');\nINSERT Membership VALUES ('Janice', 'Galvin', '555.123.4568', 'JGalvin@contoso.com.co');\nINSERT Membership VALUES ('Zheng', 'Mu', '555.123.4569', 'ZMu@contoso.net');\nSELECT * FROM Membership;\n\n--A new user is created and granted SELECT permission on the table. Queries executed as the TestUser view masked data.\nCREATE USER TestUser WITHOUT LOGIN;\nGRANT SELECT ON Membership TO TestUser;\n\n--Test user permissions\nEXECUTE AS USER = 'TestUser';\nSELECT * FROM Membership;\nREVERT;\n\n--The following example adds a masking function to the LastName column\nALTER TABLE Membership\nALTER COLUMN LastName ADD MASKED WITH (FUNCTION = 'partial(2,\"XXX\",0)');\n\n--The following example changes a masking function on the LastName column\nALTER TABLE Membership\nALTER COLUMN LastName varchar(100) MASKED WITH (FUNCTION = 'default()');\n\n--Granting the UNMASK permission allows TestUser to see the data unmasked\nGRANT UNMASK TO TestUser;\nEXECUTE AS USER = 'TestUser';\nSELECT * FROM Membership;\nREVERT;\n\n-- Removing the UNMASK permission\nREVOKE UNMASK TO TestUser;\n\n--The following statement drops the mask on the LastName column created in the previous example\nALTER TABLE Membership\nALTER COLUMN LastName DROP MASKED;\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"poolName": "mysqlpool",
+						"databaseName": "mysqlpool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Grant access to a user to a single SQL dedicated database')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "--db_datareader and db_datawriter can work for read/write permissions if granting db_owner permission is undesired.\n--For a Spark user to read and write directly from Spark into/from a dedicated SQL pool, db_owner permission is required.\n\n--Create the user in the database by running the following command targeting the desired database in the context selector (dropdown to select databases)  for an Azure AD account:\n\nCREATE USER [azuresub20210617@icloud.com] FROM EXTERNAL PROVIDER;\n\n--Grant the user a role to access the database:\n\nEXEC sp_addrolemember 'db_owner', 'azuresub20210617@icloud.com';\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"poolName": "mysqlpool",
+						"databaseName": "mysqlpool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Load the New York Taxicab dataset')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "\n/* Create tables for the sample data */\nCREATE TABLE [dbo].[Date]\n(\n    [DateID] int NOT NULL,\n    [Date] datetime NULL,\n    [DateBKey] char(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [DayOfMonth] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [DaySuffix] varchar(4) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [DayName] varchar(9) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [DayOfWeek] char(1) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [DayOfWeekInMonth] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [DayOfWeekInYear] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [DayOfQuarter] varchar(3) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [DayOfYear] varchar(3) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [WeekOfMonth] varchar(1) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [WeekOfQuarter] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [WeekOfYear] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [Month] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [MonthName] varchar(9) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [MonthOfQuarter] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [Quarter] char(1) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [QuarterName] varchar(9) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [Year] char(4) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [YearName] char(7) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [MonthYear] char(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [MMYYYY] char(6) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [FirstDayOfMonth] date NULL,\n    [LastDayOfMonth] date NULL,\n    [FirstDayOfQuarter] date NULL,\n    [LastDayOfQuarter] date NULL,\n    [FirstDayOfYear] date NULL,\n    [LastDayOfYear] date NULL,\n    [IsHolidayUSA] bit NULL,\n    [IsWeekday] bit NULL,\n    [HolidayUSA] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\nCREATE TABLE [dbo].[Geography]\n(\n    [GeographyID] int NOT NULL,\n    [ZipCodeBKey] varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,\n    [County] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [City] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [State] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [Country] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [ZipCode] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\nCREATE TABLE [dbo].[HackneyLicense]\n(\n    [HackneyLicenseID] int NOT NULL,\n    [HackneyLicenseBKey] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,\n    [HackneyLicenseCode] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\nCREATE TABLE [dbo].[Medallion]\n(\n    [MedallionID] int NOT NULL,\n    [MedallionBKey] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,\n    [MedallionCode] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\nCREATE TABLE [dbo].[Time]\n(\n    [TimeID] int NOT NULL,\n    [TimeBKey] varchar(8) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,\n    [HourNumber] tinyint NOT NULL,\n    [MinuteNumber] tinyint NOT NULL,\n    [SecondNumber] tinyint NOT NULL,\n    [TimeInSecond] int NOT NULL,\n    [HourlyBucket] varchar(15) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,\n    [DayTimeBucketGroupKey] int NOT NULL,\n    [DayTimeBucket] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\nCREATE TABLE [dbo].[Trip]\n(\n    [DateID] int NOT NULL,\n    [MedallionID] int NOT NULL,\n    [HackneyLicenseID] int NOT NULL,\n    [PickupTimeID] int NOT NULL,\n    [DropoffTimeID] int NOT NULL,\n    [PickupGeographyID] int NULL,\n    [DropoffGeographyID] int NULL,\n    [PickupLatitude] float NULL,\n    [PickupLongitude] float NULL,\n    [PickupLatLong] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [DropoffLatitude] float NULL,\n    [DropoffLongitude] float NULL,\n    [DropoffLatLong] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [PassengerCount] int NULL,\n    [TripDurationSeconds] int NULL,\n    [TripDistanceMiles] float NULL,\n    [PaymentType] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,\n    [FareAmount] money NULL,\n    [SurchargeAmount] money NULL,\n    [TaxAmount] money NULL,\n    [TipAmount] money NULL,\n    [TollsAmount] money NULL,\n    [TotalAmount] money NULL\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\nCREATE TABLE [dbo].[Weather]\n(\n    [DateID] int NOT NULL,\n    [GeographyID] int NOT NULL,\n    [PrecipitationInches] float NOT NULL,\n    [AvgTemperatureFahrenheit] float NOT NULL\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\n\n/* Load the data into your data warehouse */\nCOPY INTO [dbo].[Date]\nFROM 'https://nytaxiblob.blob.core.windows.net/2013/Date'\nWITH\n(\n    FILE_TYPE = 'CSV',\n\tFIELDTERMINATOR = ',',\n\tFIELDQUOTE = ''\n)\nOPTION (LABEL = 'COPY : Load [dbo].[Date] - Taxi dataset');\n\n\nCOPY INTO [dbo].[Geography]\nFROM 'https://nytaxiblob.blob.core.windows.net/2013/Geography'\nWITH\n(\n    FILE_TYPE = 'CSV',\n\tFIELDTERMINATOR = ',',\n\tFIELDQUOTE = ''\n)\nOPTION (LABEL = 'COPY : Load [dbo].[Geography] - Taxi dataset');\n\nCOPY INTO [dbo].[HackneyLicense]\nFROM 'https://nytaxiblob.blob.core.windows.net/2013/HackneyLicense'\nWITH\n(\n    FILE_TYPE = 'CSV',\n\tFIELDTERMINATOR = ',',\n\tFIELDQUOTE = ''\n)\nOPTION (LABEL = 'COPY : Load [dbo].[HackneyLicense] - Taxi dataset');\n\nCOPY INTO [dbo].[Medallion]\nFROM 'https://nytaxiblob.blob.core.windows.net/2013/Medallion'\nWITH\n(\n    FILE_TYPE = 'CSV',\n\tFIELDTERMINATOR = ',',\n\tFIELDQUOTE = ''\n)\nOPTION (LABEL = 'COPY : Load [dbo].[Medallion] - Taxi dataset');\n\nCOPY INTO [dbo].[Time]\nFROM 'https://nytaxiblob.blob.core.windows.net/2013/Time'\nWITH\n(\n    FILE_TYPE = 'CSV',\n\tFIELDTERMINATOR = ',',\n\tFIELDQUOTE = ''\n)\nOPTION (LABEL = 'COPY : Load [dbo].[Time] - Taxi dataset');\n\nCOPY INTO [dbo].[Weather]\nFROM 'https://nytaxiblob.blob.core.windows.net/2013/Weather'\nWITH\n(\n    FILE_TYPE = 'CSV',\n\tFIELDTERMINATOR = ',',\n\tFIELDQUOTE = '',\n\tROWTERMINATOR='0X0A'\n)\nOPTION (LABEL = 'COPY : Load [dbo].[Weather] - Taxi dataset');\n\nCOPY INTO [dbo].[Trip]\nFROM 'https://nytaxiblob.blob.core.windows.net/2013/Trip2013'\nWITH\n(\n    FILE_TYPE = 'CSV',\n\tFIELDTERMINATOR = '|',\n\tFIELDQUOTE = '',\n\tROWTERMINATOR='0X0A',\n\tCOMPRESSION = 'GZIP'\n)\nOPTION (LABEL = 'COPY : Load [dbo].[Trip] - Taxi dataset');\n\n\n/* View the data */\nSELECT  r.[request_id]\n,       r.[status]\n,       r.resource_class\n,       r.command\n,       sum(bytes_processed) AS bytes_processed\n,       sum(rows_processed) AS rows_processed\nFROM    sys.dm_pdw_exec_requests r\n              JOIN sys.dm_pdw_dms_workers w\n                     ON r.[request_id] = w.request_id\nWHERE [label] = 'COPY : Load [dbo].[Date] - Taxi dataset' OR\n    [label] = 'COPY : Load [dbo].[Geography] - Taxi dataset' OR\n    [label] = 'COPY : Load [dbo].[HackneyLicense] - Taxi dataset' OR\n    [label] = 'COPY : Load [dbo].[Medallion] - Taxi dataset' OR\n    [label] = 'COPY : Load [dbo].[Time] - Taxi dataset' OR\n    [label] = 'COPY : Load [dbo].[Weather] - Taxi dataset' OR\n    [label] = 'COPY : Load [dbo].[Trip] - Taxi dataset'\nand session_id <> session_id() and type = 'WRITER'\nGROUP BY r.[request_id],\n        r.[status],\n        r.resource_class,\n        r.command;\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"poolName": "mysqlpool",
+						"databaseName": "mysqlpool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Row-Level Security for dedicated SQL pools')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "--Create three user accounts that will demonstrate different access capabilities\nCREATE USER Manager WITHOUT LOGIN;\nCREATE USER Sales1 WITHOUT LOGIN;\nCREATE USER Sales2 WITHOUT LOGIN;\n\n--Create a table to hold data\nCREATE TABLE Sales\n    (\n    OrderID int,\n    SalesRep sysname,\n    Product varchar(10),\n    Qty int\n    );\n\n--Insert data into table with six rows of data, showing three orders for each sales representative\nINSERT INTO Sales VALUES (1, 'Sales1', 'Valve', 5);\nINSERT INTO Sales VALUES (2, 'Sales1', 'Wheel', 2);\nINSERT INTO Sales VALUES (3, 'Sales1', 'Valve', 4);\nINSERT INTO Sales VALUES (4, 'Sales2', 'Bracket', 2);\nINSERT INTO Sales VALUES (5, 'Sales2', 'Wheel', 5);\nINSERT INTO Sales VALUES (6, 'Sales2', 'Seat', 5);\n-- View the 6 rows in the table\nSELECT * FROM Sales;\n\n--Grant read access on the table to each of the users\nGRANT SELECT ON Sales TO Manager;\nGRANT SELECT ON Sales TO Sales1;\nGRANT SELECT ON Sales TO Sales2;\n\n\n--Create a new schema, and an inline table-valued function.\n--The function returns 1 when a row in the SalesRep column is the same as the user executing the query (@SalesRep = USER_NAME()) or if the user executing the query is the Manager user (USER_NAME() = 'Manager')\nEXEC('CREATE SCHEMA Security');\nGO\n\n  --Select the code for creating the function and run\nCREATE FUNCTION Security.fn_securitypredicate(@SalesRep AS sysname)\n    RETURNS TABLE\nWITH SCHEMABINDING\nAS\n    RETURN SELECT 1 AS fn_securitypredicate_result\nWHERE @SalesRep = USER_NAME() OR USER_NAME() = 'Manager'\nGO\n--Create a security policy adding the function as a filter predicate. The state must be set to ON to enable the policy.\nCREATE SECURITY POLICY SalesFilter\nADD FILTER PREDICATE Security.fn_securitypredicate(SalesRep)\nON dbo.Sales\nWITH (STATE = ON);\n\n--Allow SELECT permissions to the fn_securitypredicate function\nGRANT SELECT ON security.fn_securitypredicate TO Manager;\nGRANT SELECT ON security.fn_securitypredicate TO Sales1;\nGRANT SELECT ON security.fn_securitypredicate TO Sales2;\n\n--Test the filtering predicate, by selected from the Sales table as each user\nEXECUTE AS USER = 'Sales1';\nSELECT * FROM Sales;\nREVERT;\n\nEXECUTE AS USER = 'Sales2';\nSELECT * FROM Sales;\nREVERT;\n\nEXECUTE AS USER = 'Manager';\nSELECT * FROM Sales;\nREVERT;\n\n--Alter the security policy to disable the policy\nALTER SECURITY POLICY SalesFilter\nWITH (STATE = OFF);\n\n--Connect to the SQL database to clean up resources\nDROP USER Sales1;\nDROP USER Sales2;\nDROP USER Manager;\n\nDROP SECURITY POLICY SalesFilter;\nDROP TABLE Sales;\nDROP FUNCTION Security.fn_securitypredicate;\nDROP SCHEMA Security;\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"poolName": "mysqlpool",
+						"databaseName": "mysqlpool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/SQL script 1')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "-- This is auto-generated code\nSELECT\n    TOP 100 *\nFROM\n    OPENROWSET(\n        BULK     'https://azureopendatastorage.blob.core.windows.net/nyctlc/yellow/puYear=*/puMonth=*/*.parquet',\n        FORMAT = 'parquet'\n    ) AS [result];",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"poolName": "Built-in",
+						"databaseName": "master"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/SQL script 2')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"poolName": "mysqlpool",
+						"databaseName": "mysqlpool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Use result set caching in Synapse Pool')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "-- Turn ON/OFF result set caching for a user database.  Run this command when connecting to the MASTER database\n\nALTER DATABASE [database_name]\nSET RESULT_SET_CACHING ON;\n\n-- Turn ON/OFF result set caching for a session\nSET RESULT_SET_CACHING { ON | OFF };\n\n-- Run this command to check if a query was executed with a result cache hit or miss. The result_cache_hit column returns 1 for cache hit,\n-- 0 for cache miss, and negative values for reasons why result set caching was not used. For details, check\n-- https://docs.microsoft.com/en-us/sql/relational-databases/system-dynamic-management-views/sys-dm-pdw-exec-requests-transact-sql?view=aps-pdw-2016-au7\n\nSELECT request_id, command, result_cache_hit FROM sys.dm_pdw_exec_requests\nWHERE request_id = <'Your_Query_Request_ID'>\n\n\n-- Check the size of cached result set\nDBCC SHOWRESULTCACHESPACEUSED;\n\n-- Clean up the cache\nDBCC SHOWRESULTCACHESPACEUSED;\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"poolName": "mysqlpool",
+						"databaseName": "mysqlpool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/mysqlpool')]",
+			"type": "Microsoft.Synapse/workspaces/sqlPools",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"collation": "SQL_Latin1_General_CP1_CI_AS",
+				"maxSizeBytes": 263882790666240,
+				"restorePointInTime": "0001-01-01T00:00:00",
+				"annotations": []
+			},
+			"dependsOn": [],
+			"location": "uksouth"
+		}
+	]
+}
